@@ -74,6 +74,37 @@ def make_traffic(lat, lon, trk, gs, alt=None, vs=None, ids=None):
     )
 
 
+def make_cns_states(lat, lon, trk, gs, *, hdg=None, tas=None,
+                    alt=None, vs=None, ids=None):
+    '''Build a BlueSky-truth fake for the CNS layer.
+
+    ``Sensor.measure`` reads ``ntraf``, ``id`` and the 1D state arrays
+    ``lat/lon/alt/hdg/trk/gs/tas/vs``. This is a slimmer cousin of
+    :func:`make_traffic` that carries the extra ``hdg``/``tas`` fields the CNS
+    sensor passes through. Angles are in degrees, speeds in m/s.
+    '''
+    lat = np.asarray(lat, dtype=float)
+    lon = np.asarray(lon, dtype=float)
+    trk = np.asarray(trk, dtype=float)
+    gs = np.asarray(gs, dtype=float)
+    n = len(lat)
+
+    hdg = trk.copy() if hdg is None else np.asarray(hdg, dtype=float)
+    tas = gs.copy() if tas is None else np.asarray(tas, dtype=float)
+    alt = np.zeros(n) if alt is None else np.asarray(alt, dtype=float)
+    vs = np.zeros(n) if vs is None else np.asarray(vs, dtype=float)
+    ids = [f'AC{i + 1}' for i in range(n)] if ids is None else list(ids)
+
+    return SimpleNamespace(
+        ntraf=n,
+        id=ids,
+        lat=lat, lon=lon,
+        alt=alt, hdg=hdg,
+        trk=trk, gs=gs,
+        tas=tas, vs=vs,
+    )
+
+
 @pytest.fixture
 def head_on():
     '''Two aircraft on a head-on collision course along the same meridian.
