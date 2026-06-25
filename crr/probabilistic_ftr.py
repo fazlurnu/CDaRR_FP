@@ -257,9 +257,7 @@ def _aircraft_covariance(traffic, idx, attr, eps=1e-6):
 # Recovery method
 # -------------------------
 def resumenav_probabilistic_ftr(state: RecoveryState, conf, ownship, intruder,
-                                active, id2idx=default_id2idx,
-                                recover=default_recover,
-                                prob_threshold=0.9, Ktheta=256):
+                                active, **params):
     """
     Probabilistic version of the FTR double-criteria recovery.
 
@@ -270,16 +268,20 @@ def resumenav_probabilistic_ftr(state: RecoveryState, conf, ownship, intruder,
     The relative covariance for each pair is the sum of the two individual
     covariances.  Missing attributes fall back to a near-zero matrix.
 
-    Parameters
-    ----------
-    prob_threshold : float
-        Minimum P(DCPA > rpz) required to release a conflict (default 0.9).
-    Ktheta : int
-        Number of angle samples for the projected-normal integration (default 256).
+    Uniform recovery interface: ``(state, conf, ownship, intruder, active,
+    **params) -> (new_state, delpairs)``. Recognised ``params``:
+      ``id2idx``         conflict-pair -> indices resolver (default ``default_id2idx``)
+      ``recover``        waypoint-recovery side effect (default ``default_recover``)
+      ``prob_threshold`` minimum P(DCPA > rpz) required to release (default 0.9)
+      ``Ktheta``         angle samples for projected-normal integration (default 256)
 
-    Returns ``(new_state, delpairs)``. Side effects (writing ``active`` and
-    waypoint recovery) go through the injected ``recover`` callable.
+    Side effects (writing ``active`` and waypoint recovery) go through the
+    injected ``recover`` callable.
     """
+    id2idx         = params.get("id2idx", default_id2idx)
+    recover        = params.get("recover", default_recover)
+    prob_threshold = params.get("prob_threshold", 0.9)
+    Ktheta         = params.get("Ktheta", 256)
     state, _ = record_initial_intruder_velocity(state, conf, intruder, id2idx)
 
     pair_dxdy = compute_pair_positions(conf)

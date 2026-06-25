@@ -84,8 +84,8 @@ def test_cpa_keeps_active_before_cpa(head_on):
     id2idx = make_id2idx(head_on, head_on)
 
     state, delpairs = resumenav_cpa(
-        empty_recovery_state(), cs, head_on, head_on, active, RESOFACH,
-        id2idx=id2idx, recover=recover)
+        empty_recovery_state(), cs, head_on, head_on, active,
+        resofach=RESOFACH, id2idx=id2idx, recover=recover)
     # Still converging -> nobody released, stays active.
     assert delpairs == set()
     assert active[0] and active[1]
@@ -100,8 +100,8 @@ def test_cpa_releases_past_cpa(diverging):
 
     seeded = RecoveryState(frozenset({('AC1', 'AC2'), ('AC2', 'AC1')}), {})
     state, delpairs = resumenav_cpa(
-        seeded, cs, diverging, diverging, active, RESOFACH,
-        id2idx=id2idx, recover=recover)
+        seeded, cs, diverging, diverging, active,
+        resofach=RESOFACH, id2idx=id2idx, recover=recover)
     # Past CPA, no LOS, not bouncing -> released and recovered.
     assert state.resopairs == frozenset()
     assert not active[0] and not active[1]

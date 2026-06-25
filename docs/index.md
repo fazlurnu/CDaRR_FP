@@ -5,6 +5,9 @@ CDaRR is a functional implementation of the **Conflict Detection, Resolution, an
 ## What the pipeline does
 
 ```
+  envs                    ← spawn the scenario, step BlueSky
+        │
+        ▼
 BlueSky truth (lat, lon, gs, trk, …)
         │
         ▼
@@ -19,7 +22,14 @@ BlueSky truth (lat, lon, gs, trk, …)
         │
         ▼
   crr (conflict recovery)   ← when is it safe to resume the route?
+        │
+        ▼
+  runners                 ← compose the stages, loop, aggregate metrics
 ```
+
+The **envs** and **runners** packages are the harness around this pipeline: an
+env owns scenario setup and stepping, and a runner composes the CNS + cd/cr/crr
+stages into the per-tick loop and collects metrics.
 
 Each stage is a **pure function** of its inputs and returns an immutable result. Nothing mutates global state. Side effects (commanding the autopilot, writing ASAS-active flags) are injected as callables so the decision logic can be tested in isolation.
 
@@ -31,6 +41,8 @@ Each stage is a **pure function** of its inputs and returns an immutable result.
 | [cd.md](cd.md) | State-based conflict detection — CPA geometry, horizontal/vertical windows |
 | [cr.md](cr.md) | Conflict resolution — Modified Voltage Potential (MVP) and Velocity Obstacle (VO) |
 | [crr.md](crr.md) | Conflict recovery — CPA criterion, deterministic FTR, probabilistic FTR |
+| [envs.md](envs.md) | Scenario construction & BlueSky stepping — pairwise horizontal conflict |
+| [runners.md](runners.md) | Driving the full pipeline — simulation loop, IPR metrics, Monte Carlo |
 
 ## Functional programming conventions
 

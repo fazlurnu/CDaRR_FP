@@ -34,13 +34,21 @@ def _is_bouncing(dist, trk_own, trk_int, rpz, resofach):
         and np.linalg.norm(dist) < rpz * resofach)
 
 
-def resumenav_cpa(state: RecoveryState, conf, ownship, intruder, active,
-                  resofach, id2idx=default_id2idx, recover=default_recover):
+def resumenav_cpa(state: RecoveryState, conf, ownship, intruder, active, **params):
     '''Decide which resolved conflicts to release on a past-CPA criterion.
 
-    Returns ``(new_state, delpairs)``. Side effects (writing ``active`` and
-    waypoint recovery) go through the injected ``recover`` callable.
+    Uniform recovery interface: ``(state, conf, ownship, intruder, active,
+    **params) -> (new_state, delpairs)``. Recognised ``params``:
+      ``resofach``  bounce-check resolution factor (default 1.05)
+      ``id2idx``    conflict-pair -> indices resolver (default ``default_id2idx``)
+      ``recover``   waypoint-recovery side effect (default ``default_recover``)
+
+    Side effects (writing ``active`` and waypoint recovery) go through the
+    injected ``recover`` callable.
     '''
+    resofach = params.get("resofach", 1.05)
+    id2idx   = params.get("id2idx", default_id2idx)
+    recover  = params.get("recover", default_recover)
     resopairs = set(state.resopairs) | set(conf.confpairs)
 
     delpairs = set()

@@ -220,6 +220,80 @@ cns = replace(cns, reception=new_rm)         # change P matrix (e.g. after p_fro
 
 ---
 
+## 6. Using the CNS in a simulation loop (`runners/`)
+
+The CNS produces the degraded world view; the runner is what wires that view
+into CD / CR / CRR each tick. [`runners/stochastic_pairwise_hor_conflict.py`](../runners/stochastic_pairwise_hor_conflict.py)
+is the reference integration.
+
+### Per-tick flow
+
+```python
+cns  = make_cns(pos_ci95=pos_ci95, vel_ci95=vel_ci95,
+                reception_prob=reception_prob, seed=seed)
+...
+cns  = cns_step(cns, bs.traf)        # 1. advance the CNS from BlueSky truth
+obs  = _as_obs(cns.sensor)           # 2. wrap the sensor as a traffic-like object
+conf = cd(obs, obs, rpz, hpz, dtlookahead)          # 3. detect on the noisy view
+newtrack, newgs, newvs, alt = cr(conf, obs, obs, cfg)  # 4. resolve
+recovery_state, _ = crr(recovery_state, conf, obs, obs, active)  # 5. recover
+```
+
+The algorithms never touch `CNSState` directly — they only see the duck-typed
+`obs` object, exactly as they would see `bs.traf`.
+
+### The `_as_obs` wrapper
+
+CD/CR/CRR expect a traffic-like object exposing `lat`, `lon`, `gseast`,
+`gsnorth`, etc. `_as_obs` builds one from the sensor snapshot, taking
+**measured** state from the CNS and **onboard** parameters (performance limits,
+autopilot targets) from `bs.traf` — the latter are local to the aircraft and not
+transmitted over ADS-L:
+
+```python
+def _as_obs(sensor):
+    return SimpleNamespace(
+        ntraf=sensor.n, id=sensor.id,
+        lat=sensor.lat, lon=sensor.lon, alt=sensor.alt,
+        trk=sensor.trk, gs=sensor.gs, vs=sensor.vs,
+        gseast=sensor.gseast, gsnorth=sensor.gsnorth,
+        perf=bs.traf.perf, selalt=bs.traf.selalt,
+        adsl=SimpleNamespace(pos_acc=sensor.pos_acc, vel_acc=sensor.vel_acc),
+    )
+```
+
+### Advertised accuracy → probabilistic FTR
+
+The `.adsl` sub-namespace carries the **95% accuracy radii** the sensor recorded
+for its draw (`pos_acc` / `vel_acc`, populated from `pos_ci95` / `vel_ci95` — see
+§2 *Pass-through fields*). This is the broadcast accuracy a real ADS-L message
+advertises, and it is exactly what `crr.resumenav_probabilistic_ftr` consumes to
+build its per-aircraft covariance:
+
+```python
+# crr/probabilistic_ftr.py — _aircraft_covariance
+acc   = float(getattr(traffic.adsl, attr)[idx])   # 'pos_acc' or 'vel_acc'
+sigma = acc / _SCALE_95                            # R95 = σ·√(−2 ln 0.05) ≈ 2.448 σ
+return sigma ** 2 * np.eye(2)                      # σ² I, summed over the pair
+```
+
+If `.adsl` is absent (e.g. a fake traffic object in a unit test), the
+probabilistic rule falls back to a near-zero covariance and degrades gracefully
+to the deterministic FTR. The deterministic strategies (`cpa`,
+`double_criteria`) ignore `.adsl` entirely.
+
+### Reception caveat (`reception_prob < 1.0`)
+
+The reference runner passes the **fresh sensor snapshot** (`cns.sensor`) as both
+the ownship and intruder view. This is exact only at `reception_prob = 1.0`,
+where every observer receives every target each tick (`obs[i,j] == sensor[j]`).
+For `reception_prob < 1.0` some cells of `obs` are stale, and a faithful
+per-observer view must be extracted from the N×N matrix via
+`adsl_field(cns, <field>)` — building observer `i`'s intruder view from row `i`.
+That extraction is left to the caller; the current runner does not yet do it.
+
+---
+
 ## Summary of invariants
 
 | # | Invariant |

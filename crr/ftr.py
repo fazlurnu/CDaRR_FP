@@ -38,13 +38,19 @@ from .common import (
 
 
 def resumenav_double_criteria(state: RecoveryState, conf, ownship, intruder,
-                              active, id2idx=default_id2idx,
-                              recover=default_recover):
+                              active, **params):
     '''Decide which resolved conflicts to release on the two CPA criteria.
 
-    Returns ``(new_state, delpairs)``. Side effects (writing ``active`` and
-    waypoint recovery) go through the injected ``recover`` callable.
+    Uniform recovery interface: ``(state, conf, ownship, intruder, active,
+    **params) -> (new_state, delpairs)``. Recognised ``params``:
+      ``id2idx``    conflict-pair -> indices resolver (default ``default_id2idx``)
+      ``recover``   waypoint-recovery side effect (default ``default_recover``)
+
+    Side effects (writing ``active`` and waypoint recovery) go through the
+    injected ``recover`` callable.
     '''
+    id2idx  = params.get("id2idx", default_id2idx)
+    recover = params.get("recover", default_recover)
     state, _ = record_initial_intruder_velocity(state, conf, intruder, id2idx)
 
     pair_dxdy = compute_pair_positions(conf)
