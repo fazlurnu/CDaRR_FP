@@ -21,3 +21,6 @@ htmlcov/
 .idea/
 .vscode/
 *.swp
+
+# Latex-formatted figures
+figures/*/*.pgf
