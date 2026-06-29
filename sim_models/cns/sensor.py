@@ -66,6 +66,21 @@ def _apply_position_noise(lat, lon, exy):
     return lat_out, lon_out
 
 
+def _track_relative_bias(trk, bias_at_m, bias_ct_m):
+    '''Rotate a (along-track, cross-track) bias into (east, north) metres.
+
+    Along-track is the direction of travel; a negative value means the reported
+    position lags behind the true position (ADS-B latency signature). Cross-track
+    is 90° left of the direction of travel; the paper finds this is near zero.
+
+    Returns shape (n, 2) ready to add directly to an exy draw.
+    '''
+    trk_rad = np.deg2rad(trk)
+    east  = bias_at_m * np.sin(trk_rad) - bias_ct_m * np.cos(trk_rad)
+    north = bias_at_m * np.cos(trk_rad) + bias_ct_m * np.sin(trk_rad)
+    return np.stack([east, north], axis=1)
+
+
 def _velocity_components(gs, trk, vxy):
     '''Decompose ground speed/track into (north, east) components plus noise.
 
@@ -79,12 +94,18 @@ def _velocity_components(gs, trk, vxy):
 
 
 def measure(states, pos_ci95, vel_ci95,
-            pos_dist=gaussian, vel_dist=gaussian, rng=None) -> SensorState:
+            pos_dist=gaussian, vel_dist=gaussian, rng=None,
+            latency_s=0.0, cross_track_bias_m=0.0) -> SensorState:
     '''Measure every aircraft from truth ``states``, returning a fresh SensorState.
 
     ``pos_ci95`` / ``vel_ci95`` are scalar or shape ``(n,)`` and are read here, so
     the noise level can change per tick and per aircraft. ``pos_dist`` / ``vel_dist``
     are distribution callables ``(n, ci95, rng) -> (n, 2)`` (default Gaussian).
+
+    ``latency_s`` is the ADS-B position reporting latency in seconds (a system
+    property). The per-aircraft along-track bias is computed as ``−latency_s × gs``
+    each tick, so it automatically scales with each aircraft's ground speed.
+    ``cross_track_bias_m`` is a fixed lateral offset (near zero per the literature).
     '''
     rng = rng or np.random.default_rng()
     n = int(states.ntraf)
@@ -103,6 +124,10 @@ def measure(states, pos_ci95, vel_ci95,
 
     # Position noise: metres (east, north) -> lat/lon degrees.
     exy = pos_dist(n, pos_ci95, rng)
+    if latency_s != 0.0 or cross_track_bias_m != 0.0:
+        # Along-track bias = −latency × gs (per-aircraft, m/s → m).
+        bias_at = -latency_s * gs
+        exy = exy + _track_relative_bias(trk, bias_at, cross_track_bias_m)
     lat, lon = _apply_position_noise(
         np.asarray(states.lat, dtype=float),
         np.asarray(states.lon, dtype=float),

@@ -48,20 +48,27 @@ class CNSState:
     sensor: SensorState
     reception: ReceptionModel
     obs: ADSLObservation
-    pos_ci95: object      # scalar or (N,) — accuracy for position noise draw
-    vel_ci95: object      # scalar or (N,) — accuracy for velocity noise draw
-    pos_dist: object      # callable (n, ci95, rng) -> (n, 2)
-    vel_dist: object      # callable (n, ci95, rng) -> (n, 2)
-    rng: object           # np.random.Generator — shared; advances each tick
+    pos_ci95: object           # scalar or (N,) — accuracy for position noise draw
+    vel_ci95: object           # scalar or (N,) — accuracy for velocity noise draw
+    pos_dist: object           # callable (n, ci95, rng) -> (n, 2)
+    vel_dist: object           # callable (n, ci95, rng) -> (n, 2)
+    rng: object                # np.random.Generator — shared; advances each tick
     first_update_done: bool
+    latency_s: float           # ADS-B reporting latency; bias = −latency × gs per aircraft
+    cross_track_bias_m: float  # systematic lateral offset (near zero per literature)
 
 
 def make_cns(pos_ci95, vel_ci95, reception_prob=1.0,
-             pos_dist=None, vel_dist=None, seed=None) -> CNSState:
+             pos_dist=None, vel_dist=None, seed=None,
+             latency_s=0.0, cross_track_bias_m=0.0) -> CNSState:
     '''Create an initial (pre-tick) CNSState.
 
     All matrices start empty; the first :func:`step` call seeds every cell
     unconditionally (``force_full=True``) so no NaN cells arise.
+
+    ``latency_s``: ADS-B position reporting latency in seconds. The per-aircraft
+    along-track bias is ``−latency_s × gs`` each tick (see :func:`sensor.measure`).
+    ADS-B v2 mean latency ≈ 0.0661 s; at 20 kts (10.3 m/s) this gives ~0.68 m lag.
     '''
     rng = np.random.default_rng(seed)
     return CNSState(
@@ -74,6 +81,8 @@ def make_cns(pos_ci95, vel_ci95, reception_prob=1.0,
         vel_dist=vel_dist if vel_dist is not None else gaussian,
         rng=rng,
         first_update_done=False,
+        latency_s=latency_s,
+        cross_track_bias_m=cross_track_bias_m,
     )
 
 
@@ -88,7 +97,8 @@ def step(cns: CNSState, states) -> CNSState:
     '''
     n = int(states.ntraf)
     sensor = measure(states, cns.pos_ci95, cns.vel_ci95,
-                     cns.pos_dist, cns.vel_dist, cns.rng)
+                     cns.pos_dist, cns.vel_dist, cns.rng,
+                     cns.latency_s, cns.cross_track_bias_m)
     mask, rm = sample_mask(cns.reception, n, cns.rng,
                            force_full=not cns.first_update_done)
     obs = update(cns.obs, sensor, mask)
