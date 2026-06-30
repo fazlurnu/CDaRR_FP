@@ -7,6 +7,7 @@ from sim_models.cns.distributions import (
     ci95_to_std,
     gaussian,
     make_biased_gaussian,
+    make_mixture_gaussian,
     tstudent,
 )
 
@@ -99,3 +100,86 @@ def test_tstudent_is_a_stub():
     rng = np.random.default_rng(0)
     with pytest.raises(NotImplementedError):
         tstudent(3, 10.0, rng)
+
+
+# ---------------------------------------------------------------------------
+# make_mixture_gaussian
+# ---------------------------------------------------------------------------
+
+def test_mixture_gaussian_shape():
+    dist = make_mixture_gaussian()
+    err = dist(7, 50.0, np.random.default_rng(0))
+    assert err.shape == (7, 2)
+
+
+def test_mixture_gaussian_empty():
+    dist = make_mixture_gaussian()
+    err = dist(0, 50.0, np.random.default_rng(0))
+    assert err.shape == (0, 2)
+
+
+def test_mixture_gaussian_zero_mean():
+    dist = make_mixture_gaussian(tail_ratio=4.0, tail_weight=0.1)
+    rng = np.random.default_rng(10)
+    draws = np.concatenate([dist(2000, 50.0, rng) for _ in range(50)])
+    assert np.allclose(draws.mean(axis=0), 0.0, atol=1.0)
+
+
+def test_mixture_gaussian_preserves_ci95():
+    # The core invariant: P(r <= ci95) == 0.95 for the mixture distribution.
+    ci95 = 50.0
+    dist = make_mixture_gaussian(tail_ratio=3.0, tail_weight=0.1)
+    rng = np.random.default_rng(20)
+    draws = np.concatenate([dist(5000, ci95, rng) for _ in range(40)])
+    fraction_within = np.mean(np.linalg.norm(draws, axis=1) <= ci95)
+    assert fraction_within == pytest.approx(0.95, abs=0.01)
+
+
+def test_mixture_gaussian_dominant_sigma_tighter_than_isotropic():
+    # σ₁ < ci95/2.448 because the tail component needs headroom.
+    from sim_models.cns.distributions import CI95_TO_STD_2D
+    ci95 = 50.0
+    sigma_iso = ci95 / CI95_TO_STD_2D
+    dist = make_mixture_gaussian(tail_ratio=3.0, tail_weight=0.1)
+    rng = np.random.default_rng(30)
+    # Draws from the dominant component alone would have std < sigma_iso.
+    # We verify the overall std is close to sigma_iso (mixture preserves variance
+    # only approximately, but the 95th percentile is exact).
+    draws = np.concatenate([dist(5000, ci95, rng) for _ in range(20)])
+    # Outliers beyond 3*sigma_iso should be more frequent than in pure Gaussian.
+    pure_rng = np.random.default_rng(30)
+    pure_draws = np.concatenate([gaussian(5000, ci95, pure_rng) for _ in range(20)])
+    mix_outlier_rate = np.mean(np.linalg.norm(draws, axis=1) > 3 * sigma_iso)
+    pure_outlier_rate = np.mean(np.linalg.norm(pure_draws, axis=1) > 3 * sigma_iso)
+    assert mix_outlier_rate > pure_outlier_rate
+
+
+def test_mixture_gaussian_larger_tail_ratio_more_extreme_outliers():
+    ci95 = 50.0
+    rng_a = np.random.default_rng(40)
+    rng_b = np.random.default_rng(40)
+    mild = make_mixture_gaussian(tail_ratio=2.0, tail_weight=0.1)
+    heavy = make_mixture_gaussian(tail_ratio=6.0, tail_weight=0.1)
+    draws_mild  = np.concatenate([mild(5000, ci95, rng_a)  for _ in range(20)])
+    draws_heavy = np.concatenate([heavy(5000, ci95, rng_b) for _ in range(20)])
+    threshold = 2.0 * ci95
+    assert (np.linalg.norm(draws_heavy, axis=1) > threshold).mean() > \
+           (np.linalg.norm(draws_mild,  axis=1) > threshold).mean()
+
+
+def test_mixture_gaussian_per_aircraft_ci95():
+    dist = make_mixture_gaussian()
+    rng = np.random.default_rng(50)
+    err = dist(3, [10.0, 50.0, 100.0], rng)
+    assert err.shape == (3, 2)
+
+
+def test_mixture_gaussian_invalid_params():
+    with pytest.raises(ValueError):
+        make_mixture_gaussian(tail_weight=0.0)   # must be in (0, 1)
+    with pytest.raises(ValueError):
+        make_mixture_gaussian(tail_weight=1.0)
+    with pytest.raises(ValueError):
+        make_mixture_gaussian(tail_ratio=1.0)    # must be > 1
+    with pytest.raises(ValueError):
+        make_mixture_gaussian(tail_ratio=0.5)

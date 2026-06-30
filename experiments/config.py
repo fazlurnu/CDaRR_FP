@@ -21,7 +21,9 @@ DONE_TIMEOUT  = 10.0     # s  post-clearance settle window before early stop
 # 10 000 pairs per run is already statistically stable; n_runs=1 matches the paper.
 # Increase for explicit seed-to-seed variance estimates.
 N_RUNS        = 1
-N_JOBS        = 8        # parallel workers (over crossing angles)
+import multiprocessing as _mp
+_ncpu = _mp.cpu_count()
+N_JOBS        = 100 if _ncpu > 100 else (4 if _ncpu > 4 else 1)
 BASE_SEED     = 42
 
 # ── Probabilistic recovery ─────────────────────────────────────────────────────
