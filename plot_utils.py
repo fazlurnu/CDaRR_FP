@@ -29,6 +29,8 @@ import matplotlib.pyplot as plt
 
 # Earth radius (m) for the flat-earth trajectory projection.
 _R_EARTH = 6371000.0
+# Metres per degree latitude (flat-earth approximation; longitude scales by cos(lat)).
+_M_PER_DEG = 111_320.0
 
 # Output resolution and file formats for saved figures; both overridden by
 # set_latex_style(). Every plot_* function writes one file per format.
@@ -42,7 +44,7 @@ def set_latex_style(enable: bool = True, usetex: bool = None,
 
     Applies serif (Computer Modern) fonts, inward major+minor ticks, a
     colourblind-safe colour cycle, tight 300-dpi output and other paper-ready
-    rcParams — following https://basemrajjoub.com/programming/2026/03/17/matplotlib-latex-plots.
+    rcParams --following https://basemrajjoub.com/programming/2026/03/17/matplotlib-latex-plots.
 
     Call once *before* creating any figures.
 
@@ -126,8 +128,10 @@ _FILE_PREFIX = "stochastic_pairwise_hor_conflict"
 
 
 def _title_suffix(res) -> str:
+    lat_s = getattr(res, "latency_s", 0.0)
+    lat_str = f", latency={lat_s} s" if lat_s else ""
     return (f"pos_ci95={res.pos_ci95} m, vel_ci95={res.vel_ci95} m/s, "
-            f"p_rx={res.reception_prob}")
+            f"p_rx={res.reception_prob}{lat_str}")
 
 
 def _ac_colors(env, ntraf) -> list:
@@ -171,7 +175,7 @@ def plot_distances(res, figure_dir, label) -> str:
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Distance (m)")
     ax.set_title(
-        f"Ownship–intruder distance — {label}  —  dpsi={res.dpsi}°, RPZ={res.rpz} m\n"
+        f"Ownship-intruder distance --{label}  -- dpsi={res.dpsi} deg, RPZ={res.rpz} m\n"
         f"{_title_suffix(res)}"
     )
     ax.legend()
@@ -191,10 +195,10 @@ def plot_gs_hdg(res, figure_dir, label) -> str:
         ax2.plot(res.t_arr, hdg_wrapped[:T, k], color=colors[k], alpha=0.3)
     ax1.set_ylabel("Ground speed (m/s)")
     ax1.set_title(
-        f"Ground speed — {label}  —  dpsi={res.dpsi}°  (DRO blue, DRI red)\n"
+        f"Ground speed --{label}  -- dpsi={res.dpsi} deg  (DRO blue, DRI red)\n"
         f"{_title_suffix(res)}"
     )
-    ax2.set_ylabel("Heading (deg, wrapped ±180°)")
+    ax2.set_ylabel("Heading (deg, wrapped $\\pm$180 deg)")
     ax2.set_xlabel("Time (s)")
     ax2.set_title("Heading")
     return _save(fig, figure_dir, f"{_FILE_PREFIX}_gs_hdg_{label}.png")
@@ -215,7 +219,7 @@ def plot_avoidance(res, figure_dir, label) -> str:
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Fraction avoiding")
     ax.set_title(
-        f"Average avoidance — {label}  —  dpsi={res.dpsi}°  (1 = all aircraft avoiding)\n"
+        f"Average avoidance --{label}  -- dpsi={res.dpsi} deg  (1 = all aircraft avoiding)\n"
         f"{_title_suffix(res)}"
     )
     ax.legend()
@@ -258,7 +262,7 @@ def plot_trajectories(res, figure_dir, label) -> str:
     ax.set_xlabel("East (m) relative to ownship start")
     ax.set_ylabel("North (m) relative to ownship start")
     ax.set_title(
-        f"Ownship-centric trajectories — {label}  —  dpsi={res.dpsi}°  (DRO blue, DRI red)\n"
+        f"Ownship-centric trajectories --{label}  -- dpsi={res.dpsi} deg  (DRO blue, DRI red)\n"
         f"{_title_suffix(res)}"
     )
     return _save(fig, figure_dir, f"{_FILE_PREFIX}_trajectories_{label}.png")
@@ -277,9 +281,9 @@ def plot_run(res, figure_dir, label) -> list:
 # ── Detailed single-run, single-pair plots ────────────────────────────────────
 
 def _pair_label(res, pair) -> str:
-    '''Human-readable id of one pair, e.g. "pair 007 (DRO007 ↔ DRI007)".'''
+    '''Human-readable id of one pair, e.g. "pair 007 (DRO007 $\leftrightarrow$ DRI007)".'''
     return (f"pair {pair:03d} "
-            f"({res.env.ownship_ids[pair]} ↔ {res.env.intruder_ids[pair]})")
+            f"({res.env.ownship_ids[pair]} $\leftrightarrow$ {res.env.intruder_ids[pair]})")
 
 
 def _cpa_time(res, pair) -> float:
@@ -288,7 +292,7 @@ def _cpa_time(res, pair) -> float:
 
 
 def _draw_distance(ax, res, pair) -> None:
-    '''Top panel — actual ownship–intruder separation flown each tick.'''
+    '''Top panel --actual ownship–intruder separation flown each tick.'''
     ax.plot(res.t_arr, res.dist_arr[:, pair], color="tab:blue",
             label="actual distance")
     ax.axhline(res.rpz, color="tab:red", linestyle="--", label=f"RPZ = {res.rpz} m")
@@ -297,7 +301,7 @@ def _draw_distance(ax, res, pair) -> None:
 
 
 def _draw_dcpa_compare(ax, res, pair) -> None:
-    '''Middle panel — projected CPA distance, ground truth vs noisy observation.
+    '''Middle panel --projected CPA distance, ground truth vs noisy observation.
 
     Both lines are the geometric CPA projection computed directly from the pair
     (defined at every tick): truth from ``bs.traf`` (fresh) vs the held CNS
@@ -309,11 +313,11 @@ def _draw_dcpa_compare(ax, res, pair) -> None:
             alpha=0.85, label="projected CPA (observed)")
     ax.axhline(res.rpz, color="tab:red", linestyle="--", label=f"RPZ = {res.rpz} m")
     ax.set_ylabel("Projected dist. at CPA (m)")
-    ax.set_title("Projected CPA distance — truth vs observed")
+    ax.set_title("Projected CPA distance --truth vs observed")
 
 
 def _draw_avoidance(ax, res, pair) -> None:
-    '''Bottom panel — avoidance status (symmetric, so one line is enough).'''
+    '''Bottom panel --avoidance status (symmetric, so one line is enough).'''
     i_own = res.env.ownship_idx[pair]
     ax.step(res.t_arr, res.avoid_arr[:, i_own], where="post", color="tab:blue")
     ax.set_ylim(-0.05, 1.05)
@@ -361,7 +365,7 @@ def plot_avoidance_aggregate(results_by_label, figure_dir,
     ``results_by_label`` maps a label (recovery strategy) to a list of run
     namespaces produced with ``record_history=True``. For each strategy all the
     selected aircraft of all its runs are pooled and the mean avoidance fraction
-    over time is plotted as a single line — e.g. 10 runs × 100 pairs gives the
+    over time is plotted as a single line --e.g. 10 runs × 100 pairs gives the
     average avoidance flag over 1000 pairs.
 
     Runs of unequal length are zero-padded to the longest one: once a run has
@@ -401,11 +405,131 @@ def plot_avoidance_aggregate(results_by_label, figure_dir,
     ax.set_xlabel("Time (s)")
     ax.set_ylabel(f"Average avoidance flag ({select} aircraft)")
     ax.set_title(
-        f"Aggregated average avoidance — recovery strategy comparison  —  "
-        f"dpsi={any_res.dpsi}°\n{_title_suffix(any_res)}"
+        f"Aggregated average avoidance --recovery strategy comparison  -- "
+        f"dpsi={any_res.dpsi} deg\n{_title_suffix(any_res)}"
     )
     ax.legend()
     return _save(fig, figure_dir, name)
+
+
+def plot_pos_error(res, figure_dir, label) -> str:
+    '''Per-aircraft positional error (sensor vs truth) over time.
+
+    The error magnitude at each tick is sqrt(Δeast² + Δnorth²) in metres, where
+    Δeast and Δnorth are derived from the difference between sensor lat/lon and
+    truth lat/lon. For a high-latency run this reveals the systematic along-track
+    bias; for normal noise it shows the random scatter around zero.
+
+    Requires ``record_history=True`` and that the runner recorded
+    ``sensor_lat_arr`` / ``sensor_lon_arr`` (available from
+    :mod:`runners.stochastic_pairwise_hor_conflict` ≥ latency support).
+    '''
+    truth_lat = res.lat_arr          # (T, ntraf)
+    truth_lon = res.lon_arr
+    sens_lat  = res.sensor_lat_arr
+    sens_lon  = res.sensor_lon_arr
+
+    lat0r = np.deg2rad(truth_lat)
+    d_north = (sens_lat - truth_lat) * _M_PER_DEG
+    d_east  = (sens_lon - truth_lon) * _M_PER_DEG * np.cos(lat0r)
+    err_m   = np.sqrt(d_east**2 + d_north**2)    # (T, ntraf)
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+    for k in range(err_m.shape[1]):
+        ax.plot(res.t_arr, err_m[:, k], color="tab:blue", alpha=0.15, linewidth=0.8)
+    ax.plot(res.t_arr, err_m.mean(axis=1), color="tab:blue", linewidth=2,
+            label="mean positional error")
+    ax.axhline(res.rpz, color="tab:red", linestyle="--",
+               label=f"RPZ = {res.rpz} m")
+
+    lat_s = getattr(res, "latency_s", 0.0)
+    expected_bias = lat_s * np.mean(res.gs_arr) if lat_s else None
+    if expected_bias is not None:
+        ax.axhline(expected_bias, color="tab:orange", linestyle=":",
+                   label=f"expected bias $\\approx$ {expected_bias:.0f} m  (latency $\\times$ mean gs)")
+
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Positional error, sensor vs truth (m)")
+    ax.set_title(
+        f"Sensor positional error --{label}  -- dpsi={res.dpsi} deg\n"
+        f"{_title_suffix(res)}"
+    )
+    ax.legend()
+    return _save(fig, figure_dir, f"{_FILE_PREFIX}_pos_error_{label}.png")
+
+
+def plot_latency_comparison(res_base, res_lat, figure_dir, pair,
+                            crr_label) -> str:
+    '''Two-column pair-detail comparison: baseline noise (left) vs high latency (right).
+
+    Each column has three vertically stacked panels (shared time axis):
+      • actual ownship–intruder distance with RPZ line
+      • projected DCPA --ground truth (green) vs CNS observation (orange)
+      • avoidance status (step plot)
+
+    A vertical dashed line marks the actual CPA time in each result. The left
+    column is the baseline (``res_base``); the right is the latency run
+    (``res_lat``).  Both must have been run with ``record_history=True``.
+    '''
+    def _cpa_t(res, p):
+        return float(res.t_arr[int(np.argmin(res.dist_arr[:, p]))])
+
+    def _fill_col(axes, res, col_title):
+        ax_dist, ax_dcpa, ax_av = axes
+        t = res.t_arr
+        t_cpa = _cpa_t(res, pair)
+
+        # Row 1 – actual distance
+        ax_dist.plot(t, res.dist_arr[:, pair], color="tab:blue")
+        ax_dist.axhline(res.rpz, color="tab:red", linestyle="--",
+                        label=f"RPZ = {res.rpz} m")
+        ax_dist.axvline(t_cpa, color="dimgray", linestyle=":", linewidth=1.5,
+                        label=f"CPA @ {t_cpa:.0f} s")
+        ax_dist.set_ylabel("Actual dist. (m)")
+        ax_dist.set_title(f"{col_title}\nActual distance  (CPA = {res.min_dist[pair]:.1f} m)")
+        ax_dist.legend(loc="upper right", fontsize=8)
+
+        # Row 2 – projected DCPA
+        ax_dcpa.plot(t, res.dcpa_gt_arr[:, pair], color="tab:green",
+                     label="DCPA truth")
+        ax_dcpa.plot(t, res.dcpa_obs_arr[:, pair], color="tab:orange",
+                     alpha=0.85, label="DCPA observed")
+        ax_dcpa.axhline(res.rpz, color="tab:red", linestyle="--")
+        ax_dcpa.axvline(t_cpa, color="dimgray", linestyle=":", linewidth=1.5)
+        ax_dcpa.set_ylim(-2, 252)
+        ax_dcpa.set_ylabel("Projected DCPA (m)")
+        ax_dcpa.set_title("Projected DCPA --truth vs observed")
+        ax_dcpa.legend(loc="upper right", fontsize=8)
+
+        # Row 3 – avoidance
+        i_own = res.env.ownship_idx[pair]
+        ax_av.step(t, res.avoid_arr[:, i_own], where="post", color="tab:blue")
+        ax_av.axvline(t_cpa, color="dimgray", linestyle=":", linewidth=1.5)
+        ax_av.set_ylim(-0.05, 1.05)
+        ax_av.set_yticks([0, 1])
+        ax_av.set_yticklabels(["Off", "On"], rotation=90, va="center")
+        ax_av.set_ylabel("Avoidance")
+        ax_av.set_title("Avoidance status")
+        ax_av.set_xlabel("Time (s)")
+        ax_av.set_xlim(t[0], 150)
+
+    lat_s = getattr(res_lat, "latency_s", "?")
+    fig, axes = plt.subplots(3, 2, figsize=(14, 11),
+                             sharex="col", sharey="row")
+
+    _fill_col(axes[:, 0], res_base, f"Baseline (latency = 0 s)")
+    _fill_col(axes[:, 1], res_lat,  f"High latency ({lat_s} s)")
+
+    pair_label = (f"pair {pair:03d} "
+                  f"({res_base.env.ownship_ids[pair]} $\leftrightarrow$ {res_base.env.intruder_ids[pair]})")
+    fig.suptitle(
+        f"Latency comparison --{crr_label}  -- {pair_label}  -- dpsi={res_base.dpsi} deg\n"
+        f"{_title_suffix(res_base).split(',')[0]}  |  latency = 0 s  vs  {lat_s} s",
+        fontsize=10,
+    )
+    fig.tight_layout()
+    return _write(fig, figure_dir,
+                  f"{_FILE_PREFIX}_latency_comparison_pair{pair:03d}_{crr_label}")
 
 
 def plot_avoidance_compare(results, figure_dir,
@@ -424,7 +548,7 @@ def plot_avoidance_compare(results, figure_dir,
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Fraction avoiding (all aircraft)")
     ax.set_title(
-        f"Average avoidance — recovery strategy comparison  —  dpsi={any_res.dpsi}°\n"
+        f"Average avoidance --recovery strategy comparison  -- dpsi={any_res.dpsi} deg\n"
         f"{_title_suffix(any_res)}"
     )
     ax.legend()
