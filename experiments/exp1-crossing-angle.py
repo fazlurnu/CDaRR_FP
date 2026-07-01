@@ -24,29 +24,9 @@ from config import (
     PAIR_WIDTH, PAIR_HEIGHT, RPZ, HPZ, DTLOOKAHEAD, SPEED, AIRCRAFT_TYPE,
     TMAX, DONE_TIMEOUT, KTHETA, DEFAULT_GAMMA,
     CROSSING_ANGLES, UNCERTAINTY_LEVELS, RECOVERY_METHODS, METHOD_LABELS,
-    N_JOBS, BASE_SEED, RESULTS_DIR,
+    N_RUNS, N_JOBS, BASE_SEED, RESULTS_DIR,
 )
-from runners.stochastic_pairwise_hor_conflict import run_single
-
-# ---------------------------------------------------------------------------
-# Worker
-# ---------------------------------------------------------------------------
-
-def _run_one(angle, unc, method, seed):
-    '''Single (angle, uncertainty, method) configuration. Returns (ipr, median_dcpa).'''
-    res = run_single(
-        pair_width=PAIR_WIDTH, pair_height=PAIR_HEIGHT,
-        rpz=RPZ, hpz=HPZ, dtlookahead=DTLOOKAHEAD,
-        init_speed_ownship=SPEED, init_speed_intruder=SPEED,
-        aircraft_type=AIRCRAFT_TYPE, dpsi=float(angle),
-        pos_ci95=unc['pos_ci95'], vel_ci95=unc['vel_ci95'],
-        reception_prob=1.0,
-        tmax=TMAX, done_timeout=DONE_TIMEOUT,
-        crr=method, Ktheta=KTHETA, prob_threshold=DEFAULT_GAMMA,
-        seed=seed, record_history=False,
-    )
-    return res.ipr, float(np.median(res.min_dist))
-
+from runners.stochastic_pairwise_hor_conflict import run_parallel
 
 # ---------------------------------------------------------------------------
 # Main sweep
@@ -64,15 +44,21 @@ for ui, unc in enumerate(UNCERTAINTY_LEVELS):
         label = f'{unc["label"]} / {METHOD_LABELS[method]}'
         print(f'Running: {label} ...', flush=True)
 
-        # Parallelise over crossing angles; each worker runs one 10 000-pair sim.
-        results = Parallel(n_jobs=N_JOBS)(
-            delayed(_run_one)(angle, unc, method, BASE_SEED + ai)
-            for ai, angle in enumerate(CROSSING_ANGLES)
-        )
-
-        for ai, (ipr, med_dcpa) in enumerate(results):
-            ipr_arr[ui, mi, ai]        = ipr
-            median_dcpa_arr[ui, mi, ai] = med_dcpa
+        for ai, angle in enumerate(CROSSING_ANGLES):
+            res = run_parallel(
+                n_runs=N_RUNS, n_jobs=N_JOBS,
+                base_seed=BASE_SEED,
+                pair_width=PAIR_WIDTH, pair_height=PAIR_HEIGHT,
+                rpz=RPZ, hpz=HPZ, dtlookahead=DTLOOKAHEAD,
+                init_speed_ownship=SPEED, init_speed_intruder=SPEED,
+                aircraft_type=AIRCRAFT_TYPE, dpsi=float(angle),
+                pos_ci95=unc['pos_ci95'], vel_ci95=unc['vel_ci95'],
+                reception_prob=1.0,
+                tmax=TMAX, done_timeout=DONE_TIMEOUT,
+                crr=method, Ktheta=KTHETA, prob_threshold=DEFAULT_GAMMA,
+            )
+            ipr_arr[ui, mi, ai]        = res['overall_ipr']
+            median_dcpa_arr[ui, mi, ai] = float(np.median(res['worst_cpa']))
 
         mean_ipr = ipr_arr[ui, mi, :].mean()
         print(f'  done — mean IPR = {mean_ipr:.4f}', flush=True)

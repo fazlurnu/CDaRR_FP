@@ -189,6 +189,9 @@ def run_single(
     crr="double_criteria",
     simdt_factor: int = 1,
     seed: int = 44,
+    pos_dist=None,
+    vel_dist=None,
+    latency_s: float = 0.0,
     record_history: bool = False,
 ) -> SimpleNamespace:
     '''Run one stochastic CD/CR/CRR simulation and return a result namespace.
@@ -276,12 +279,15 @@ def run_single(
     )
 
     cns            = make_cns(pos_ci95=pos_ci95, vel_ci95=vel_ci95,
-                               reception_prob=reception_prob, seed=seed)
+                               reception_prob=reception_prob, seed=seed,
+                               pos_dist=pos_dist, vel_dist=vel_dist,
+                               latency_s=latency_s)
     recovery_state = empty_recovery_state()
     active         = np.zeros(bs.traf.ntraf, dtype=bool)
 
     distance_list = []
     time_list, lat_list, lon_list, gs_list, hdg_list = [], [], [], [], []
+    sensor_lat_list, sensor_lon_list = [], []
     avoid_list = []
     dcpa_obs_list, dcpa_gt_list = [], []
     t             = 0.0
@@ -327,6 +333,8 @@ def run_single(
             # (which only refreshes on ASAS ticks, hence its stepwise shape).
             dcpa_gt_list.append(_geom_dcpa(bs.traf, env))
             dcpa_obs_list.append(_geom_dcpa(cns.sensor, env))
+            sensor_lat_list.append(cns.sensor.lat.copy())
+            sensor_lon_list.append(cns.sensor.lon.copy())
         t += simdt
 
     t_end = t
@@ -342,6 +350,7 @@ def run_single(
         dist_arr=dist_arr, min_dist=min_dist, n_los=n_los, env=env,
         rpz=rpz, hpz=hpz, dtlookahead=dtlookahead, dpsi=dpsi,
         pos_ci95=pos_ci95, vel_ci95=vel_ci95, reception_prob=reception_prob,
+        latency_s=latency_s,
         t_arr=np.array(time_list) if record_history else None,
         lat_arr=np.array(lat_list) if record_history else None,
         lon_arr=np.array(lon_list) if record_history else None,
@@ -349,7 +358,9 @@ def run_single(
         hdg_arr=np.array(hdg_list) if record_history else None,
         avoid_arr=np.array(avoid_list) if record_history else None,
         dcpa_obs_arr=np.array(dcpa_obs_list) if record_history else None,
-        dcpa_gt_arr=np.array(dcpa_gt_list) if record_history else None,
+        dcpa_gt_arr=np.array(dcpa_gt_list)   if record_history else None,
+        sensor_lat_arr=np.array(sensor_lat_list) if record_history else None,
+        sensor_lon_arr=np.array(sensor_lon_list) if record_history else None,
     )
 
 
