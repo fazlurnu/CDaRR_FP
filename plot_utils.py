@@ -258,6 +258,8 @@ def plot_trajectories(res, figure_dir, label) -> str:
         ax.plot(np.where(int_av, x_int, np.nan), np.where(int_av, y_int, np.nan),
                 color="tab:red", alpha=0.3)
 
+    ax.set_xlim(-3000, 1000)
+    ax.set_ylim(-100, 4100)
     ax.set_aspect("equal", adjustable="box")
     ax.set_xlabel("East (m) relative to ownship start")
     ax.set_ylabel("North (m) relative to ownship start")
@@ -355,6 +357,56 @@ def plot_pair_detail(res, figure_dir, pair, label) -> str:
     ax3.set_xlabel("Time (s)")
     fig.tight_layout()
     return _write(fig, figure_dir, f"{_FILE_PREFIX}_pair{pair:03d}_detail_{label}")
+
+
+def plot_pair_trajectory(res, figure_dir, pair, label) -> str:
+    '''Ownship-centric trajectory for a single pair (avoiding segments in dark,
+    actual CPA marked). Companion to :func:`plot_pair_detail`, zoomed to one
+    pair instead of plotting every pair in the run.
+    '''
+    env = res.env
+    lat_arr, lon_arr, avoid_arr = res.lat_arr, res.lon_arr, res.avoid_arr
+
+    i_own = env.ownship_idx[pair]
+    i_int = env.intruder_idx[pair]
+
+    lat0  = float(lat_arr[0, i_own])
+    lon0  = float(lon_arr[0, i_own])
+    lat0r = np.deg2rad(lat0)
+
+    x_own = np.deg2rad(lon_arr[:, i_own] - lon0) * _R_EARTH * np.cos(lat0r)
+    y_own = np.deg2rad(lat_arr[:, i_own] - lat0) * _R_EARTH
+    x_int = np.deg2rad(lon_arr[:, i_int] - lon0) * _R_EARTH * np.cos(lat0r)
+    y_int = np.deg2rad(lat_arr[:, i_int] - lat0) * _R_EARTH
+
+    own_av = avoid_arr[:, i_own] == 1.0
+    int_av = avoid_arr[:, i_int] == 1.0
+
+    fig, ax = plt.subplots(figsize=(7, 7))
+    ax.plot(x_own, y_own, color="lightskyblue", alpha=0.4, label="Ownship (nominal)")
+    ax.plot(x_int, y_int, color="lightsalmon",  alpha=0.4, label="Intruder (nominal)")
+    ax.plot(np.where(own_av, x_own, np.nan), np.where(own_av, y_own, np.nan),
+            color="tab:blue", label="Ownship (avoiding)")
+    ax.plot(np.where(int_av, x_int, np.nan), np.where(int_av, y_int, np.nan),
+            color="tab:red", label="Intruder (avoiding)")
+
+    i_cpa = int(np.argmin(res.dist_arr[:, pair]))
+    ax.scatter([x_own[i_cpa], x_int[i_cpa]], [y_own[i_cpa], y_int[i_cpa]],
+               color="dimgray", marker="x", s=80, zorder=5,
+               label=f"CPA @ {res.t_arr[i_cpa]:.0f} s")
+
+    ax.set_xlim(-3000, 1000)
+    ax.set_ylim(-100, 4100)
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_xlabel("East (m) relative to ownship start")
+    ax.set_ylabel("North (m) relative to ownship start")
+    ax.set_title(
+        f"Ownship-centric trajectory --{_pair_label(res, pair)}  --{label}\n"
+        f"CPA = {res.min_dist[pair]:.1f} m  -- {_title_suffix(res)}"
+    )
+    ax.legend(loc="best", fontsize=8)
+    fig.tight_layout()
+    return _write(fig, figure_dir, f"{_FILE_PREFIX}_pair{pair:03d}_trajectory_{label}")
 
 
 def plot_avoidance_aggregate(results_by_label, figure_dir,

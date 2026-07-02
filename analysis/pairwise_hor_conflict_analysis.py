@@ -28,8 +28,8 @@ from joblib import Parallel, delayed
 
 from runners.stochastic_pairwise_hor_conflict import run_single
 from plot_utils import (
-    plot_avoidance_aggregate, plot_pair_detail, plot_trajectories,
-    set_latex_style,
+    plot_avoidance_aggregate, plot_pair_detail, plot_pair_trajectory,
+    plot_trajectories, set_latex_style,
 )
 
 # Publication / LaTeX-friendly typography (serif CM fonts, inward ticks, 300 dpi).
@@ -42,9 +42,9 @@ PAIR_WIDTH    = 10     # 10 × 10 = 100 pairs per run
 PAIR_HEIGHT   = 10
 RPZ           = 50.0
 HPZ           = 50.0
-DTLOOKAHEAD   = 121.0
-INIT_SPD_OWN  = 20.0
-INIT_SPD_INT  = 20.0
+DTLOOKAHEAD   = 120.0
+INIT_SPD_OWN  = 10.2889 # m/s
+INIT_SPD_INT  = 10.2889 # m/s
 DPSI          = 90
 AIRCRAFT_TYPE = "M600"
 SIMDT_FACTOR  = 1
@@ -59,6 +59,8 @@ RECEPTION_PROB = 1.0
 TMAX         = DTLOOKAHEAD * 4
 DONE_TIMEOUT = 30.0
 
+GAMMA        = 0.999   # confidence threshold for the probabilistic (Prob FTR) strategy
+
 # FTR strategies only.
 STRATEGIES = ("double_criteria", "probabilistic")
 
@@ -70,7 +72,7 @@ BASE_SEED = 42
 
 # Detailed analysis: single run/strategy at this seed; these pairs get a figure.
 SEED  = 44
-PAIRS = (12, 24)
+PAIRS = (12, 94)
 
 _ROOT      = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIGURE_DIR = os.path.join(_ROOT, "figures", "analysis")
@@ -88,6 +90,7 @@ RUN_KWARGS = dict(
     resofach=1.0, recovery_resofach=1.05,
     simdt_factor=SIMDT_FACTOR,
     record_history=True,
+    prob_threshold=GAMMA,
 )
 
 # ── 1. Aggregate avoidance comparison (FTR vs Prob FTR) ──────────────────────────
@@ -119,6 +122,8 @@ for label in STRATEGIES:
         print(f"    pair {pair:03d} "
               f"({res.env.ownship_ids[pair]} ↔ {res.env.intruder_ids[pair]}), "
               f"actual CPA = {res.min_dist[pair]:.1f} m  → {path}")
+        traj_pair_path = plot_pair_trajectory(res, FIGURE_DIR, pair, label)
+        print(f"      trajectory  → {traj_pair_path}")
     # Ownship-centric trajectories for the whole run (avoiding segments in dark).
     traj_path = plot_trajectories(res, FIGURE_DIR, label)
     print(f"    trajectories  → {traj_path}")
